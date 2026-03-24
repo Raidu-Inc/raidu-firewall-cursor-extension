@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "hooks": {
+    "beforeSubmitPrompt": [{ "command": "node ${CURSOR_PLUGIN_ROOT}/hooks/dist/index.js", "timeout": 10 }],
+    "preToolUse": [{ "command": "node ${CURSOR_PLUGIN_ROOT}/hooks/dist/index.js", "timeout": 10 }],
+    "beforeReadFile": [{ "command": "node ${CURSOR_PLUGIN_ROOT}/hooks/dist/index.js", "timeout": 10 }],
+    "beforeShellExecution": [{ "command": "node ${CURSOR_PLUGIN_ROOT}/hooks/dist/index.js", "timeout": 10 }],
+    "beforeMCPExecution": [{ "command": "node ${CURSOR_PLUGIN_ROOT}/hooks/dist/index.js", "timeout": 10 }],
+    "beforeTabFileRead": [{ "command": "node ${CURSOR_PLUGIN_ROOT}/hooks/dist/index.js", "timeout": 5 }],
+    "subagentStart": [{ "command": "node ${CURSOR_PLUGIN_ROOT}/hooks/dist/index.js", "timeout": 10 }],
+    "afterShellExecution": [{ "command": "node ${CURSOR_PLUGIN_ROOT}/hooks/dist/index.js", "timeout": 5 }],
+    "afterMCPExecution": [{ "command": "node ${CURSOR_PLUGIN_ROOT}/hooks/dist/index.js", "timeout": 5 }],
+    "afterFileEdit": [{ "command": "node ${CURSOR_PLUGIN_ROOT}/hooks/dist/index.js", "timeout": 5 }],
+    "afterAgentResponse": [{ "command": "node ${CURSOR_PLUGIN_ROOT}/hooks/dist/index.js", "timeout": 5 }],
+    "afterAgentThought": [{ "command": "node ${CURSOR_PLUGIN_ROOT}/hooks/dist/index.js", "timeout": 5 }],
+    "stop": [{ "command": "node ${CURSOR_PLUGIN_ROOT}/hooks/dist/index.js", "timeout": 60 }]
+  }
+}

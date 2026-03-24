@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "hooks": {
+    "preToolUse": [{ "command": "node ${CURSOR_PLUGIN_ROOT}/hooks/dist/index.js", "timeout": 10 }],
+    "beforeReadFile": [{ "command": "node ${CURSOR_PLUGIN_ROOT}/hooks/dist/index.js", "timeout": 10 }],
+    "beforeShellExecution": [{ "command": "node ${CURSOR_PLUGIN_ROOT}/hooks/dist/index.js", "timeout": 10 }],
+    "beforeMCPExecution": [{ "command": "node ${CURSOR_PLUGIN_ROOT}/hooks/dist/index.js", "timeout": 10 }],
+    "beforeTabFileRead": [{ "command": "node ${CURSOR_PLUGIN_ROOT}/hooks/dist/index.js", "timeout": 5 }],
+    "subagentStart": [{ "command": "node ${CURSOR_PLUGIN_ROOT}/hooks/dist/index.js", "timeout": 10 }],
+    "afterShellExecution": [{ "command": "node ${CURSOR_PLUGIN_ROOT}/hooks/dist/index.js", "timeout": 5 }],
+    "afterMCPExecution": [{ "command": "node ${CURSOR_PLUGIN_ROOT}/hooks/dist/index.js", "timeout": 5 }],
+    "afterFileEdit": [{ "command": "node ${CURSOR_PLUGIN_ROOT}/hooks/dist/index.js", "timeout": 5 }]
+  }
+}

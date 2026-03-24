@@ -1,0 +1,20 @@
+---
+description: Raise awareness when conversation context may contain sensitive data that could leak through AI prompts
+alwaysApply: true
+---
+
+When you notice patterns in the conversation context that look like real personal data, flag them to the developer before proceeding:
+
+- Social security numbers (XXX-XX-XXXX patterns)
+- Credit card numbers (16-digit sequences)
+- Patient names appearing near medical context
+- Email addresses of real people (not test/example addresses)
+- API keys, tokens, or credentials (strings starting with sk-, ghp_, AKIA, xoxb-)
+- Private keys (BEGIN PRIVATE KEY blocks)
+- Connection strings with embedded passwords
+- Physical addresses paired with names
+- Medical record numbers or diagnosis codes
+
+If you detect any of these, tell the developer: "This context appears to contain real sensitive data. Consider removing it before proceeding."
+
+Do NOT flag obvious test data, example values, or documentation placeholders.

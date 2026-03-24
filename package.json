@@ -1,0 +1,96 @@
+{
+  "name": "raidu-firewall",
+  "displayName": "Raidu Firewall",
+  "description": "AI Accountability Layer. Scans prompts for PII, blocks sensitive file access, full audit trail.",
+  "version": "0.1.0",
+  "publisher": "raidu",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/raidu-ai/raidu-cursor-plugin"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "raidu",
+          "title": "Raidu",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "raidu": [
+        {
+          "type": "webview",
+          "id": "raidu.sidebar",
+          "name": "Raidu Firewall"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "raidu.login",
+        "title": "Raidu: Connect"
+      },
+      {
+        "command": "raidu.logout",
+        "title": "Raidu: Disconnect"
+      },
+      {
+        "command": "raidu.showStatus",
+        "title": "Raidu: Show Status"
+      },
+      {
+        "command": "raidu.clearHistory",
+        "title": "Raidu: Clear History"
+      }
+    ],
+    "configuration": {
+      "title": "Raidu Firewall",
+      "properties": {
+        "raidu.apiBase": {
+          "type": "string",
+          "default": "https://sandbox.raidu.com",
+          "description": "Raidu API base URL"
+        },
+        "raidu.workspaceId": {
+          "type": "string",
+          "default": ""
+        },
+        "raidu.environmentId": {
+          "type": "string",
+          "default": ""
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node esbuild.mjs && cd webview && npm run build",
+    "build:ext": "node esbuild.mjs",
+    "build:webview": "cd webview && npm run build",
+    "dev": "node esbuild.mjs --watch",
+    "package": "npm run build && vsce package",
+    "lint": "biome check src hooks/src",
+    "lint:fix": "biome check --write src hooks/src",
+    "format": "biome format --write src hooks/src"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.8",
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.0.0",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.5.0"
+  }
+}

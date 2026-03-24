@@ -1,0 +1,14 @@
+{
+  "name": "raidu-firewall",
+  "displayName": "Raidu Firewall",
+  "version": "0.1.0",
+  "description": "AI Accountability Layer. Scans prompts for PII, blocks sensitive file access, audits every AI interaction. HIPAA, EU AI Act, SOC 2 ready.",
+  "author": {
+    "name": "Raidu",
+    "email": "marketplace@raidu.com"
+  },
+  "homepage": "https://raidu.com/cursor",
+  "repository": "https://github.com/raidu-ai/raidu-cursor-plugin",
+  "license": "MIT",
+  "keywords": ["governance", "security", "pii", "hipaa", "eu-ai-act", "soc2", "compliance", "audit", "dlp", "secrets"]
+}

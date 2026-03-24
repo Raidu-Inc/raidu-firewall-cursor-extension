@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+hooks/dist/
+webview/dist/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/settings.json
+
+# Logs
+*.log
+
+# Environment
+.env
+.env.*
+
+# Package
+*.vsix
