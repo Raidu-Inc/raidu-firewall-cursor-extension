@@ -28,8 +28,8 @@ When connected to Raidu cloud, prompts are also validated against your organizat
 ### From source
 
 ```bash
-git clone https://github.com/raidu-ai/raidu-cursor-plugin.git
-cd raidu-cursor-plugin
+git clone https://github.com/raidu-ai/raidu-firewall-cursor-extension.git
+cd raidu-firewall-cursor-extension
 npm install
 npm run build
 ```
