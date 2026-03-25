@@ -17,7 +17,11 @@ export const DEFAULT_POLICY: Policy = {
   files: {
     blocked: [
       '.env',
-      '.env.*',
+      '.env.local',
+      '.env.production',
+      '.env.staging',
+      '.env.development',
+      '*.env',
       'credentials*',
       'secrets*',
       '*.pem',
@@ -41,7 +45,7 @@ export const DEFAULT_POLICY: Policy = {
       'docker-compose*.yml',
       'docker-compose*.yaml',
     ],
-    allowed: [],
+    allowed: ['.env.example', '.env.sample', '.env.template'],
   },
   commands: {
     blocked: [
