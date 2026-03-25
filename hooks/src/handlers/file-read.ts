@@ -28,8 +28,10 @@ export function handleBeforeTabFileRead(event: HookEvent): HookResponse {
   const filePath = event.file_path || '';
   const hit = isSensitiveFile(filePath);
   if (hit) {
+    // Only log blocked Tab reads, not allowed ones (too noisy, RAI-1900)
     audit({ event: 'beforeTabFileRead', action: 'blocked', filePath, reason: hit, ...ids(event) });
     return { permission: 'deny' };
   }
+  // Don't log allowed Tab reads - fires on every keystroke, floods logs
   return allow();
 }

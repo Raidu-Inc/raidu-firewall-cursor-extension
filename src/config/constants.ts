@@ -18,4 +18,11 @@ export const STATS_FILE = path.join(LOG_DIR, 'stats.json');
  * Hook events that are too noisy to show in the sidebar event list.
  * They are still recorded in the audit log.
  */
-export const HIDDEN_EVENTS: ReadonlySet<string> = new Set(['stop', 'afterAgentThought', 'sessionStart', 'sessionEnd']);
+export const HIDDEN_EVENTS: ReadonlySet<string> = new Set([
+  'stop',
+  'afterAgentThought',
+  'sessionStart',
+  'sessionEnd',
+  'beforeTabFileRead',  // Too noisy: fires on every Tab completion keystroke (RAI-1900)
+  'afterTabFileEdit',   // Same: Tab completion edits
+]);
