@@ -123,12 +123,26 @@ export function redactText(text: string, entities: EntityMatch[]): string {
 
 export function copyToClipboard(text: string): void {
   try {
-    if (process.platform === 'darwin') {
-      execFileSync('pbcopy', [], { input: text, timeout: 2000 });
-    } else if (process.platform === 'linux') {
-      execFileSync('xclip', ['-selection', 'clipboard'], { input: text, timeout: 2000 });
+    switch (process.platform) {
+      case 'darwin':
+        execFileSync('pbcopy', [], { input: text, timeout: 2000 });
+        break;
+      case 'linux':
+        // Try xclip first, fall back to xsel
+        try {
+          execFileSync('xclip', ['-selection', 'clipboard'], { input: text, timeout: 2000 });
+        } catch {
+          execFileSync('xsel', ['--clipboard', '--input'], { input: text, timeout: 2000 });
+        }
+        break;
+      case 'win32':
+        // Use clip.exe (built into Windows, reads from stdin, no shell injection risk)
+        execFileSync('clip', [], { input: text, timeout: 2000 });
+        break;
     }
-  } catch {}
+  } catch {
+    debug('clipboard: failed to copy redacted text');
+  }
 }
 
 export function entitySummary(entities: EntityMatch[]): Array<{ type: string; score: number }> {
