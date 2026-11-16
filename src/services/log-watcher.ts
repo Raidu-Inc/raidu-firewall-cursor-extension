@@ -17,8 +17,27 @@ export interface LogWatcherEvents {
   audit: (events: AuditEntry[]) => void;
 }
 
+/** How often the log files are checked, in milliseconds. */
+const POLL_INTERVAL_MS = 1000;
+
 export class LogWatcher extends EventEmitter {
-  private _watcher: fs.FSWatcher | undefined;
+  private _started = false;
+  private readonly _onStats = (curr: fs.Stats, prev: fs.Stats) => {
+    if (curr.mtimeMs === prev.mtimeMs && curr.size === prev.size) return;
+    try {
+      this.emit('stats', getStats());
+    } catch {
+      /* ignore read errors during rapid writes */
+    }
+  };
+  private readonly _onAudit = (curr: fs.Stats, prev: fs.Stats) => {
+    if (curr.mtimeMs === prev.mtimeMs && curr.size === prev.size) return;
+    try {
+      this.emit('audit', getEvents());
+    } catch {
+      /* ignore */
+    }
+  };
 
   // Type-safe overrides
   override on<K extends keyof LogWatcherEvents>(event: K, listener: LogWatcherEvents[K]): this {
@@ -29,44 +48,41 @@ export class LogWatcher extends EventEmitter {
     return super.emit(event, ...args);
   }
 
-  /** Begin watching the log directory. Safe to call multiple times. */
+  /**
+   * Begin watching the log files. Safe to call multiple times.
+   *
+   * This used fs.watch on the log DIRECTORY, which throws when the directory
+   * does not exist and was then never retried. The directory is often absent
+   * at activation (a fresh install, or one whose ~/.raidu was cleared), and
+   * the hook creates it on its first event, so the Activity list stayed empty
+   * while audit.jsonl filled up. A directory watch also stays bound to the
+   * deleted directory if it is removed and recreated.
+   *
+   * fs.watchFile polls each file by path instead: it accepts a path that does
+   * not exist yet, fires when the file appears, and survives the file or its
+   * directory being recreated. Two stat calls a second is negligible.
+   */
   start(): void {
-    if (this._watcher) {
+    if (this._started) {
       return;
     }
-
+    this._started = true;
     try {
-      this._watcher = fs.watch(LOG_DIR, (_eventType, filename) => {
-        if (!filename) {
-          return;
-        }
-
-        if (filename === 'stats.json' || filename === STATS_FILE) {
-          try {
-            this.emit('stats', getStats());
-          } catch {
-            /* ignore read errors during rapid writes */
-          }
-        }
-
-        if (filename === 'audit.jsonl' || filename === AUDIT_LOG) {
-          try {
-            this.emit('audit', getEvents());
-          } catch {
-            /* ignore */
-          }
-        }
-      });
+      fs.mkdirSync(LOG_DIR, { recursive: true, mode: 0o700 });
     } catch {
-      // Directory may not exist yet; will be created by the hook.
+      /* the hook creates it too; polling works either way */
     }
+    fs.watchFile(STATS_FILE, { interval: POLL_INTERVAL_MS }, this._onStats);
+    fs.watchFile(AUDIT_LOG, { interval: POLL_INTERVAL_MS }, this._onAudit);
   }
 
   /** Stop watching. Safe to call even if never started. */
   stop(): void {
-    if (this._watcher) {
-      this._watcher.close();
-      this._watcher = undefined;
+    if (!this._started) {
+      return;
     }
+    fs.unwatchFile(STATS_FILE, this._onStats);
+    fs.unwatchFile(AUDIT_LOG, this._onAudit);
+    this._started = false;
   }
 }
