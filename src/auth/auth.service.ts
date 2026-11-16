@@ -42,7 +42,9 @@ export async function login(): Promise<void> {
   _pendingState = crypto.randomUUID();
   settings.savePendingState(_pendingState);
   const apiBase = settings.getApiBase();
-  const loginUrl = `${apiBase}/login?ide_callback=cursor&state=${_pendingState}`;
+  // tool=cursor records the pairing against the Cursor entry in Tower's tool
+  // registry, which is what Connect your tools reads to show it as connected.
+  const loginUrl = `${apiBase}/login?ide_callback=cursor&tool=cursor&state=${_pendingState}`;
 
   await vscode.env.openExternal(vscode.Uri.parse(loginUrl));
 
