@@ -251,8 +251,78 @@ export function registerUriHandler(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.window.registerUriHandler({
       handleUri(uri: vscode.Uri) {
+        if (uri.path === '/connect') {
+          void handleConnectRequest(uri);
+          return;
+        }
         handleCallback(uri);
       },
     }),
   );
+}
+
+// ---------------------------------------------------------------------------
+// Connect request from the Tower console
+// ---------------------------------------------------------------------------
+
+/** Origin plus path, without trailing slashes, or undefined if not a usable Tower URL. */
+function normalizeTowerUrl(raw: string): string | undefined {
+  let parsed: URL;
+  try {
+    parsed = new URL(raw.trim());
+  } catch {
+    return undefined;
+  }
+  // A Tower is reached over https. Plain http only for a Tower on this machine.
+  const isLoopback = ['localhost', '127.0.0.1', '[::1]'].includes(parsed.hostname);
+  if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && isLoopback)) return undefined;
+  if (parsed.username || parsed.password || parsed.search || parsed.hash) return undefined;
+  return `${parsed.origin}${parsed.pathname.replace(/\/+$/, '')}`;
+}
+
+/**
+ * cursor://raidu.raidu-firewall/connect?tower=<url>, opened by "Connect with a
+ * link" on the Tower console's Connect your tools page.
+ *
+ * The console cannot finish the pairing itself: handleCallback accepts only a
+ * state this extension generated, so a console-minted state was refused with
+ * "state mismatch". The link therefore only asks the extension to START a
+ * login, which is exactly what "Raidu: Connect" does, and that login mints the
+ * state and accepts its own callback.
+ *
+ * Starting a login is harmless; moving the extension to another Tower is not,
+ * because every prompt would then be checked there. Anyone can craft this
+ * link, so a Tower other than the configured one needs the person to confirm.
+ */
+export async function handleConnectRequest(uri: vscode.Uri): Promise<void> {
+  const requested = new URLSearchParams(uri.query).get('tower');
+
+  if (requested) {
+    const tower = normalizeTowerUrl(requested);
+    if (!tower) {
+      vscode.window.showErrorMessage(
+        'Raidu: The connect link names a Tower address that is not a valid https URL. Nothing was changed.',
+      );
+      return;
+    }
+
+    const current = normalizeTowerUrl(settings.getApiBase());
+    if (tower.toLowerCase() !== current?.toLowerCase()) {
+      const SWITCH = 'Switch and connect';
+      const choice = await vscode.window.showWarningMessage(
+        `Raidu: Connect this editor to ${tower}?`,
+        {
+          modal: true,
+          detail:
+            `Raidu is currently set to ${settings.getApiBase()}. After switching, your prompts and tool calls ` +
+            "are checked by the new Tower. Continue only if you started this from your own organisation's Raidu console.",
+        },
+        SWITCH,
+      );
+      if (choice !== SWITCH) return;
+      await vscode.workspace.getConfiguration('raidu').update('apiBase', tower, vscode.ConfigurationTarget.Global);
+    }
+  }
+
+  await login();
 }
