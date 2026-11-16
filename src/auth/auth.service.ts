@@ -9,6 +9,7 @@
  */
 
 import * as crypto from 'node:crypto';
+import * as fs from 'node:fs';
 import * as vscode from 'vscode';
 import * as settings from '../config/settings';
 
@@ -39,11 +40,46 @@ export function getProfile(): UserProfile | undefined {
 
 export async function login(): Promise<void> {
   _pendingState = crypto.randomUUID();
+  settings.savePendingState(_pendingState);
   const apiBase = settings.getApiBase();
-  const loginUrl = `${apiBase}/console/login?ide_callback=cursor&state=${_pendingState}`;
+  // tool=cursor records the pairing against the Cursor entry in Tower's tool
+  // registry, which is what Connect your tools reads to show it as connected.
+  const loginUrl = `${apiBase}/login?ide_callback=cursor&tool=cursor&state=${_pendingState}`;
 
   await vscode.env.openExternal(vscode.Uri.parse(loginUrl));
-  vscode.window.showInformationMessage('Raidu: Opening browser for login...');
+
+  // The browser redirect (cursor://raidu.raidu-firewall/callback?...) is routed by
+  // the OS to the primary editor window. When running in an Extension Development
+  // Host (F5) or a different window, that window can't complete the login, so let
+  // the user paste the callback URL here instead.
+  const PASTE = 'Paste callback URL';
+  void vscode.window
+    .showInformationMessage(
+      'Raidu: Complete login in your browser. If the editor does not reconnect automatically, copy the callback URL and paste it here.',
+      PASTE,
+    )
+    .then((choice) => {
+      if (choice === PASTE) return promptForCallbackUrl();
+    });
+}
+
+export async function promptForCallbackUrl(): Promise<void> {
+  const input = await vscode.window.showInputBox({
+    title: 'Raidu: Paste login callback URL',
+    prompt: 'e.g. cursor://raidu.raidu-firewall/callback?token=...&state=...',
+    ignoreFocusOut: true,
+    password: true,
+  });
+  if (!input) return;
+
+  let uri: vscode.Uri;
+  try {
+    uri = vscode.Uri.parse(input.trim(), true);
+  } catch {
+    vscode.window.showErrorMessage('Raidu: That does not look like a valid callback URL.');
+    return;
+  }
+  await handleCallback(uri);
 }
 
 // ---------------------------------------------------------------------------
@@ -55,11 +91,14 @@ export async function handleCallback(uri: vscode.Uri): Promise<void> {
   const state = params.get('state');
   const token = params.get('token');
 
-  if (!state || state !== _pendingState) {
-    vscode.window.showErrorMessage('Raidu: Authentication failed (state mismatch).');
+  // Accept state from this window or from another window that started login.
+  const expected = [_pendingState, settings.readPendingState()].filter(Boolean);
+  if (!state || !expected.includes(state)) {
+    vscode.window.showErrorMessage('Raidu: Authentication failed (state mismatch). Please run "Raidu: Connect" again.');
     return;
   }
   _pendingState = undefined;
+  settings.clearPendingState();
 
   if (!token) {
     vscode.window.showErrorMessage('Raidu: Authentication failed (no token).');
@@ -180,6 +219,33 @@ export async function restoreSession(): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
+// Cross-window sync: pick up logins/logouts completed in another editor window
+// ---------------------------------------------------------------------------
+
+export function watchTokenFile(context: vscode.ExtensionContext): void {
+  let lastToken = settings.readTokenFile();
+
+  const onChange = async () => {
+    const token = settings.readTokenFile();
+    if (token === lastToken) return;
+    lastToken = token;
+
+    if (token) {
+      await settings.adoptToken(token);
+      await loadConfig(token);
+    } else {
+      _profile = undefined;
+    }
+    vscode.commands.executeCommand('raidu.refreshUI');
+  };
+
+  fs.watchFile(settings.TOKEN_FILE, { interval: 1000 }, () => {
+    void onChange();
+  });
+  context.subscriptions.push({ dispose: () => fs.unwatchFile(settings.TOKEN_FILE) });
+}
+
+// ---------------------------------------------------------------------------
 // URI handler registration
 // ---------------------------------------------------------------------------
 
@@ -187,8 +253,78 @@ export function registerUriHandler(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.window.registerUriHandler({
       handleUri(uri: vscode.Uri) {
+        if (uri.path === '/connect') {
+          void handleConnectRequest(uri);
+          return;
+        }
         handleCallback(uri);
       },
     }),
   );
+}
+
+// ---------------------------------------------------------------------------
+// Connect request from the Tower console
+// ---------------------------------------------------------------------------
+
+/** Origin plus path, without trailing slashes, or undefined if not a usable Tower URL. */
+function normalizeTowerUrl(raw: string): string | undefined {
+  let parsed: URL;
+  try {
+    parsed = new URL(raw.trim());
+  } catch {
+    return undefined;
+  }
+  // A Tower is reached over https. Plain http only for a Tower on this machine.
+  const isLoopback = ['localhost', '127.0.0.1', '[::1]'].includes(parsed.hostname);
+  if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && isLoopback)) return undefined;
+  if (parsed.username || parsed.password || parsed.search || parsed.hash) return undefined;
+  return `${parsed.origin}${parsed.pathname.replace(/\/+$/, '')}`;
+}
+
+/**
+ * cursor://raidu.raidu-firewall/connect?tower=<url>, opened by "Connect with a
+ * link" on the Tower console's Connect your tools page.
+ *
+ * The console cannot finish the pairing itself: handleCallback accepts only a
+ * state this extension generated, so a console-minted state was refused with
+ * "state mismatch". The link therefore only asks the extension to START a
+ * login, which is exactly what "Raidu: Connect" does, and that login mints the
+ * state and accepts its own callback.
+ *
+ * Starting a login is harmless; moving the extension to another Tower is not,
+ * because every prompt would then be checked there. Anyone can craft this
+ * link, so a Tower other than the configured one needs the person to confirm.
+ */
+export async function handleConnectRequest(uri: vscode.Uri): Promise<void> {
+  const requested = new URLSearchParams(uri.query).get('tower');
+
+  if (requested) {
+    const tower = normalizeTowerUrl(requested);
+    if (!tower) {
+      vscode.window.showErrorMessage(
+        'Raidu: The connect link names a Tower address that is not a valid https URL. Nothing was changed.',
+      );
+      return;
+    }
+
+    const current = normalizeTowerUrl(settings.getApiBase());
+    if (tower.toLowerCase() !== current?.toLowerCase()) {
+      const SWITCH = 'Switch and connect';
+      const choice = await vscode.window.showWarningMessage(
+        `Raidu: Connect this editor to ${tower}?`,
+        {
+          modal: true,
+          detail:
+            `Raidu is currently set to ${settings.getApiBase()}. After switching, your prompts and tool calls ` +
+            "are checked by the new Tower. Continue only if you started this from your own organisation's Raidu console.",
+        },
+        SWITCH,
+      );
+      if (choice !== SWITCH) return;
+      await vscode.workspace.getConfiguration('raidu').update('apiBase', tower, vscode.ConfigurationTarget.Global);
+    }
+  }
+
+  await login();
 }

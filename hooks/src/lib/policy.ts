@@ -116,31 +116,50 @@ export function isSensitiveFile(filePath: string): string | null {
   return null;
 }
 
-export function checkToolInputForSensitiveFiles(toolInput: Record<string, unknown>): string | null {
+export interface SensitiveToolAccess {
+  /** User-facing reason, as shown in the deny message. */
+  message: string;
+  kind: 'sensitive_file' | 'command_policy';
+  /** The policy pattern that matched. */
+  rule: string;
+  /** Basename of the file, when the tool named one. */
+  fileName?: string;
+}
+
+export function findSensitiveToolAccess(toolInput: Record<string, unknown>): SensitiveToolAccess | null {
   const policy = getPolicy();
 
   if (toolInput.file_path) {
     const hit = isSensitiveFile(toolInput.file_path as string);
-    if (hit) return `Blocked access to ${path.basename(toolInput.file_path as string)} (policy: ${hit})`;
+    if (hit) {
+      const fileName = path.basename(toolInput.file_path as string);
+      return { message: `Blocked access to ${fileName} (policy: ${hit})`, kind: 'sensitive_file', rule: hit, fileName };
+    }
   }
 
   if (toolInput.glob) {
     for (const p of policy.files.blocked) {
       if (globToRegex(p).test(toolInput.glob as string))
-        return `Blocked search for sensitive files (${toolInput.glob})`;
+        return { message: `Blocked search for sensitive files (${toolInput.glob})`, kind: 'sensitive_file', rule: p };
     }
   }
 
   if (toolInput.command) {
     for (const p of policy.files.blocked) {
-      if (globToRegex(p).test(toolInput.command as string)) return `Blocked shell access to ${p}`;
+      if (globToRegex(p).test(toolInput.command as string))
+        return { message: `Blocked shell access to ${p}`, kind: 'sensitive_file', rule: p };
     }
     for (const p of policy.commands.blocked) {
       try {
-        if (new RegExp(p, 'i').test(toolInput.command as string)) return `Blocked command (policy: ${p})`;
+        if (new RegExp(p, 'i').test(toolInput.command as string))
+          return { message: `Blocked command (policy: ${p})`, kind: 'command_policy', rule: p };
       } catch {}
     }
   }
 
   return null;
+}
+
+export function checkToolInputForSensitiveFiles(toolInput: Record<string, unknown>): string | null {
+  return findSensitiveToolAccess(toolInput)?.message ?? null;
 }

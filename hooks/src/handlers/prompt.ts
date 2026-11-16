@@ -6,6 +6,7 @@
 import { audit, incStat } from '../lib/audit';
 import { allow, denyPrompt, ids } from '../lib/helpers';
 import { copyToClipboard, entitySummary, formatEntities, redactText, scanText } from '../lib/redaction';
+import { reportScanBlockIfUnrecorded } from '../lib/report';
 import type { HookEvent, HookResponse } from '../lib/types';
 
 export function handleBeforeSubmitPrompt(event: HookEvent): HookResponse {
@@ -32,6 +33,7 @@ export function handleBeforeSubmitPrompt(event: HookEvent): HookResponse {
       scanTimeMs: result.scanTimeMs,
       ...ids(event),
     });
+    reportScanBlockIfUnrecorded(event, result, { event: 'beforeSubmitPrompt' });
 
     return denyPrompt(
       `Detected ${formatEntities(result.entities)} in your prompt. A compliant version is in your clipboard. Press Cmd+V.`,

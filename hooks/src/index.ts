@@ -19,6 +19,7 @@ import { handleStop } from './handlers/session';
 import { handleAfterShellExecution, handleBeforeShellExecution } from './handlers/shell';
 import { handlePreToolUse } from './handlers/tool-use';
 import { debug } from './lib/audit';
+import { FLUSH_FLAG, flushReports, flushReportsInBackground } from './lib/report';
 import type { HookEvent, HookResponse } from './lib/types';
 
 // ---------------------------------------------------------------------------
@@ -90,6 +91,11 @@ async function main(): Promise<void> {
     debug(`ERR ${hook}: ${(err as Error).message?.slice(0, 100)}`);
   }
 
+  // Send any queued block reports to Tower without delaying this hook.
+  try {
+    flushReportsInBackground();
+  } catch {}
+
   // For blocked actions, Cursor displays stdout as the message.
   // Output just the user_message text for clean display, not the full JSON.
   if (response.permission === 'deny' || response.continue === false) {
@@ -100,4 +106,13 @@ async function main(): Promise<void> {
   process.stdout.write(JSON.stringify(response));
 }
 
-main();
+if (process.argv.includes(FLUSH_FLAG)) {
+  // Detached background flusher started by flushReportsInBackground().
+  try {
+    flushReports();
+  } catch (err: unknown) {
+    debug(`ERR flush: ${(err as Error).message?.slice(0, 100)}`);
+  }
+} else {
+  main();
+}

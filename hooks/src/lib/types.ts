@@ -129,3 +129,35 @@ export interface AuditEntry {
   generationId?: string;
   [key: string]: unknown;
 }
+
+// ---------------------------------------------------------------------------
+// Block reports to Tower (POST /api/guardrails/ide/report)
+// ---------------------------------------------------------------------------
+
+/** Why Tower has no violation for this block yet. */
+export type BlockDetector = 'local' | 'api_unavailable' | 'api_unrecorded';
+
+/** Metadata-only description of a block. Never carries prompt/command/file content. */
+export interface BlockReport {
+  event:
+    | 'beforeSubmitPrompt'
+    | 'preToolUse'
+    | 'beforeShellExecution'
+    | 'beforeMCPExecution'
+    | 'beforeReadFile'
+    | 'beforeTabFileRead';
+  kind: 'sensitive_data' | 'sensitive_file' | 'exfiltration' | 'command_policy';
+  detector: BlockDetector;
+  tool?: string;
+  entityTypes?: string[];
+  rule?: string;
+  fileName?: string;
+  ideConversationId?: string;
+  ideGenerationId?: string;
+  occurredAt?: string;
+}
+
+export type EvidenceVerdict =
+  | { outcome: 'stored' }
+  | { outcome: 'not_applicable' }
+  | { outcome: 'failed'; reason: string };

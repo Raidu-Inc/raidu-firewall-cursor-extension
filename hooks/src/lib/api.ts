@@ -13,6 +13,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { debug } from './audit';
+import type { BlockReport, EvidenceVerdict } from './types';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -25,6 +26,10 @@ const MAX_API_INPUT = 100_000;
 // ---------------------------------------------------------------------------
 // Token reader (secure file, not settings.json)
 // ---------------------------------------------------------------------------
+
+export function hasToken(): boolean {
+  return getToken() !== null;
+}
 
 function getToken(): string | null {
   try {
@@ -73,6 +78,8 @@ export interface APIValidationResult {
   sanitizedInput?: string;
   summary?: { pii?: number; pci?: number; phi?: number; secrets?: number };
   processingTimeMs?: number;
+  /** Whether Tower stored the violation row (newer servers only). */
+  evidence?: EvidenceVerdict;
 }
 
 export function validateViaAPI(input: string): APIValidationResult | null {
@@ -121,6 +128,48 @@ export function validateViaAPI(input: string): APIValidationResult | null {
   } catch (err: unknown) {
     const latencyMs = (performance.now() - startMs).toFixed(0);
     debug(`API: FAILED after ${latencyMs}ms | ${(err as Error).message?.slice(0, 150)}`);
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Block reports (called from the detached flusher, never from a hook directly)
+// ---------------------------------------------------------------------------
+
+/**
+ * POST a batch of block reports. Returns per-report verdicts in request order,
+ * or null on any failure (no token, network, non-2xx), so the caller requeues.
+ */
+export function postBlockReports(reports: BlockReport[]): EvidenceVerdict[] | null {
+  const token = getToken();
+  if (!token || reports.length === 0) return null;
+
+  const url = `${API_BASE}/api/guardrails/ide/report`;
+  const body = JSON.stringify({ reports });
+
+  try {
+    const result = execFileSync(
+      'curl',
+      [
+        '-fsSL',
+        '-X',
+        'POST',
+        '-H',
+        `Authorization: Bearer ${token}`,
+        '-H',
+        'Content-Type: application/json',
+        '--data-binary',
+        '@-',
+        url,
+      ],
+      // Body over stdin, not argv: keeps it out of the process list.
+      { input: body, timeout: 15000, encoding: 'utf-8' as BufferEncoding, stdio: ['pipe', 'pipe', 'pipe'] },
+    );
+    const parsed = JSON.parse(result as string) as { results?: EvidenceVerdict[] };
+    if (!Array.isArray(parsed.results)) return null;
+    return parsed.results;
+  } catch (err: unknown) {
+    debug(`API: report FAILED | ${(err as Error).message?.slice(0, 150)}`);
     return null;
   }
 }

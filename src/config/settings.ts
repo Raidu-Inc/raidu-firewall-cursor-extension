@@ -13,7 +13,9 @@ import * as path from 'node:path';
 import * as vscode from 'vscode';
 
 const SECTION = 'raidu';
-const TOKEN_FILE = path.join(os.homedir(), '.raidu', 'token');
+export const TOKEN_FILE = path.join(os.homedir(), '.raidu', 'token');
+const PENDING_STATE_FILE = path.join(os.homedir(), '.raidu', 'login-state');
+const PENDING_STATE_TTL_MS = 15 * 60 * 1000;
 
 let _secrets: vscode.SecretStorage | undefined;
 
@@ -83,6 +85,48 @@ export async function setWorkspaceId(id: string): Promise<void> {
 
 export async function setEnvironmentId(id: string): Promise<void> {
   await cfg().update('environmentId', id, vscode.ConfigurationTarget.Global);
+}
+
+/** Reads the token straight from ~/.raidu/token (shared by every editor window). */
+export function readTokenFile(): string | undefined {
+  try {
+    return fs.readFileSync(TOKEN_FILE, 'utf-8').trim() || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Mirror a token written by another window into this window's SecretStorage. */
+export async function adoptToken(token: string): Promise<void> {
+  if (_secrets) {
+    await _secrets.store('ideToken', token);
+  }
+}
+
+// ---- Pending login state (shared across editor windows) -------------------
+// The OAuth redirect is delivered by the OS to whichever editor window it
+// chooses, not necessarily the one that started login. Persisting the state
+// lets any window running the extension validate and complete the callback.
+
+export function savePendingState(state: string): void {
+  try {
+    fs.mkdirSync(path.dirname(PENDING_STATE_FILE), { recursive: true, mode: 0o700 });
+    fs.writeFileSync(PENDING_STATE_FILE, JSON.stringify({ state, createdAt: Date.now() }), { mode: 0o600 });
+  } catch {}
+}
+
+export function readPendingState(): string | undefined {
+  try {
+    const { state, createdAt } = JSON.parse(fs.readFileSync(PENDING_STATE_FILE, 'utf-8'));
+    if (typeof state === 'string' && Date.now() - createdAt < PENDING_STATE_TTL_MS) return state;
+  } catch {}
+  return undefined;
+}
+
+export function clearPendingState(): void {
+  try {
+    fs.unlinkSync(PENDING_STATE_FILE);
+  } catch {}
 }
 
 /** Clears all stored credentials and identifiers. */

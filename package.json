@@ -44,6 +44,10 @@
         "title": "Raidu: Connect"
       },
       {
+        "command": "raidu.pasteCallback",
+        "title": "Raidu: Paste Login Callback URL"
+      },
+      {
         "command": "raidu.logout",
         "title": "Raidu: Disconnect"
       },

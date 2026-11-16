@@ -9,7 +9,7 @@ import { execFileSync } from 'node:child_process';
 import { validateViaAPI } from './api';
 import { debug } from './audit';
 import { PIIScanner } from './scanner';
-import type { EntityMatch, ScanResult } from './types';
+import type { BlockDetector, EntityMatch, ScanResult } from './types';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -37,7 +37,18 @@ const localScanner = new PIIScanner();
  *
  * Returns a unified ScanResult regardless of which path was used.
  */
-export function scanText(text: string): ScanResult & { source: 'api' | 'local'; sanitizedInput?: string } {
+export type UnifiedScanResult = ScanResult & {
+  source: 'api' | 'local';
+  sanitizedInput?: string;
+  /**
+   * Set only when entities were found but Tower has NO violation row for them,
+   * i.e. the block must be reported via /ide/report. Undefined when /validate
+   * already stored the row (or nothing was found).
+   */
+  detector?: BlockDetector;
+};
+
+export function scanText(text: string): UnifiedScanResult {
   if (!text || text.length > MAX_SCAN_SIZE) {
     return { entities: [], scanTimeMs: 0, source: 'local' };
   }
@@ -62,6 +73,8 @@ export function scanText(text: string): ScanResult & { source: 'api' | 'local'; 
       scanTimeMs: apiResult.processingTimeMs ?? performance.now() - start,
       source: 'api',
       sanitizedInput: apiResult.sanitizedInput,
+      // Older servers omit `evidence`; they always attempted the write.
+      detector: apiResult.evidence?.outcome === 'failed' ? 'api_unrecorded' : undefined,
     };
   }
 
@@ -71,7 +84,7 @@ export function scanText(text: string): ScanResult & { source: 'api' | 'local'; 
     const localCheck = localScanner.scan(text);
     if (localCheck.entities.length > 0) {
       debug(`scan: API passed but local found ${localCheck.entities.length} entities`);
-      return { ...localCheck, source: 'local' };
+      return { ...localCheck, source: 'local', detector: 'local' };
     }
     return { entities: [], scanTimeMs: performance.now() - start, source: 'api' };
   }
@@ -80,7 +93,11 @@ export function scanText(text: string): ScanResult & { source: 'api' | 'local'; 
   const localResult = localScanner.scan(text);
   debug(`scan: local fallback (${localResult.entities.length} entities, ${localResult.scanTimeMs.toFixed(1)}ms)`);
 
-  return { ...localResult, source: 'local' };
+  return {
+    ...localResult,
+    source: 'local',
+    detector: localResult.entities.length > 0 ? 'api_unavailable' : undefined,
+  };
 }
 
 /**
@@ -123,12 +140,26 @@ export function redactText(text: string, entities: EntityMatch[]): string {
 
 export function copyToClipboard(text: string): void {
   try {
-    if (process.platform === 'darwin') {
-      execFileSync('pbcopy', [], { input: text, timeout: 2000 });
-    } else if (process.platform === 'linux') {
-      execFileSync('xclip', ['-selection', 'clipboard'], { input: text, timeout: 2000 });
+    switch (process.platform) {
+      case 'darwin':
+        execFileSync('pbcopy', [], { input: text, timeout: 2000 });
+        break;
+      case 'linux':
+        // Try xclip first, fall back to xsel
+        try {
+          execFileSync('xclip', ['-selection', 'clipboard'], { input: text, timeout: 2000 });
+        } catch {
+          execFileSync('xsel', ['--clipboard', '--input'], { input: text, timeout: 2000 });
+        }
+        break;
+      case 'win32':
+        // Use clip.exe (built into Windows, reads from stdin, no shell injection risk)
+        execFileSync('clip', [], { input: text, timeout: 2000 });
+        break;
     }
-  } catch {}
+  } catch {
+    debug('clipboard: failed to copy redacted text');
+  }
 }
 
 export function entitySummary(entities: EntityMatch[]): Array<{ type: string; score: number }> {
