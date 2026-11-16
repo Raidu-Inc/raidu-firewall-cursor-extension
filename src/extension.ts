@@ -40,6 +40,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
   // --- 2. Register URI handler for OAuth callback ---
   authService.registerUriHandler(context);
+  authService.watchTokenFile(context);
 
   // --- 3. Create status bar ---
   const statusBar = createStatusBar(context);
@@ -52,6 +53,9 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.commands.registerCommand('raidu.login', async () => {
       await authService.login();
+    }),
+    vscode.commands.registerCommand('raidu.pasteCallback', async () => {
+      await authService.promptForCallbackUrl();
     }),
   );
 

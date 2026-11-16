@@ -5,6 +5,7 @@
 import { audit, incStat } from '../lib/audit';
 import { allow, deny, ids } from '../lib/helpers';
 import { entitySummary, formatEntities, scanText, scanTextLocal } from '../lib/redaction';
+import { reportBlock, reportScanBlockIfUnrecorded } from '../lib/report';
 import type { HookEvent, HookResponse } from '../lib/types';
 
 // ---------------------------------------------------------------------------
@@ -19,7 +20,8 @@ const EXFIL_PATTERNS: RegExp[] = [/curl\s+.*(-d|--data)/i, /wget\s+.*--post/i, /
 
 export function handleBeforeShellExecution(event: HookEvent): HookResponse {
   const cmd = event.command || '';
-  const { entities } = scanText(cmd);
+  const scan = scanText(cmd);
+  const { entities } = scan;
   if (entities.length > 0) {
     incStat('commandsBlocked');
     audit({
@@ -29,6 +31,7 @@ export function handleBeforeShellExecution(event: HookEvent): HookResponse {
       entities: entitySummary(entities),
       ...ids(event),
     });
+    reportScanBlockIfUnrecorded(event, scan, { event: 'beforeShellExecution', tool: 'Shell' });
     return deny(`Blocked command. Contains ${formatEntities(entities)}.`);
   }
   if (EXFIL_PATTERNS.some((p) => p.test(cmd))) {
@@ -40,6 +43,7 @@ export function handleBeforeShellExecution(event: HookEvent): HookResponse {
       reason: 'data exfiltration',
       ...ids(event),
     });
+    reportBlock(event, { event: 'beforeShellExecution', kind: 'exfiltration', detector: 'local', tool: 'Shell' });
     return deny('Blocked command. Data exfiltration pattern detected.');
   }
   audit({ event: 'beforeShellExecution', action: 'allowed', command: cmd.slice(0, 200), ...ids(event) });

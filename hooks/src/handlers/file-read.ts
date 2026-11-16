@@ -9,6 +9,7 @@ import * as path from 'node:path';
 import { audit, incStat } from '../lib/audit';
 import { allow, deny, ids } from '../lib/helpers';
 import { isSensitiveFile } from '../lib/policy';
+import { reportBlock } from '../lib/report';
 import type { HookEvent, HookResponse } from '../lib/types';
 
 export function handleBeforeReadFile(event: HookEvent): HookResponse {
@@ -17,6 +18,13 @@ export function handleBeforeReadFile(event: HookEvent): HookResponse {
   if (hit) {
     incStat('commandsBlocked');
     audit({ event: 'beforeReadFile', action: 'blocked', filePath, reason: hit, ...ids(event) });
+    reportBlock(event, {
+      event: 'beforeReadFile',
+      kind: 'sensitive_file',
+      detector: 'local',
+      rule: hit,
+      fileName: path.basename(filePath),
+    });
     return deny(`Blocked reading ${path.basename(filePath)} (policy: ${hit}).`);
   }
 
